@@ -1,0 +1,242 @@
+openapi: 3.1.0
+info:
+  title: The Cartel API
+  version: 0.1.0
+  description: Authentication API for The Cartel user application.
+servers:
+  - url: http://localhost:4000
+    description: Local development
+tags:
+  - name: System
+  - name: Authentication
+paths:
+  /api/v1/health:
+    get:
+      tags: [System]
+      summary: Check API health
+      responses:
+        "200":
+          description: API is available
+  /api/v1/auth/sign-up:
+    post:
+      tags: [Authentication]
+      summary: Create a user account
+      description: Creates a pending USER account and emails a six-digit verification code that expires after five minutes. No session is issued until verification succeeds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignUpRequest"
+      responses:
+        "201":
+          description: Pending account created and verification code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: Verification email could not be delivered
+  /api/v1/auth/verify-email:
+    post:
+      tags: [Authentication]
+      summary: Verify a pending account with its email OTP
+      description: Activates the user and issues the session cookie after a valid, unused six-digit code is submitted within five minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Email verified and session cookie issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Code is incorrect, invalid, or expired
+        "409":
+          description: Email is already verified
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/resend-verification-otp:
+    post:
+      tags: [Authentication]
+      summary: Request a new email verification OTP
+      description: Invalidates the previous code. A generic response prevents account enumeration. Resends have a 60-second cooldown and database-backed hourly limits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendVerificationRequest"
+      responses:
+        "200":
+          description: Generic resend result
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: Verification email could not be delivered
+  /api/v1/auth/sign-in:
+    post:
+      tags: [Authentication]
+      summary: Sign in with an email or username
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignInRequest"
+      responses:
+        "200":
+          description: Signed in and session cookie issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/sign-out:
+    post:
+      tags: [Authentication]
+      summary: Revoke the current session
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Signed out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/sign-out-everywhere:
+    post:
+      tags: [Authentication]
+      summary: Revoke every session belonging to the current user
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: All sessions revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/me:
+    get:
+      tags: [Authentication]
+      summary: Return the current authenticated user
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: cartel_session
+  schemas:
+    SignUpRequest:
+      type: object
+      required: [firstName, lastName, username, email, password]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 50, example: Suman }
+        lastName: { type: string, minLength: 1, maxLength: 50, example: Dey }
+        username: { type: string, minLength: 3, maxLength: 30, pattern: "^[a-z0-9_]+$", example: sumandey }
+        email: { type: string, format: email, example: suman@example.com }
+        password: { type: string, format: password, minLength: 8, maxLength: 72 }
+    SignInRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string, example: suman@example.com }
+        password: { type: string, format: password }
+    VerifyEmailRequest:
+      type: object
+      required: [email, otp]
+      properties:
+        email: { type: string, format: email, example: suman@example.com }
+        otp: { type: string, pattern: "^[0-9]{6}$", example: "123456" }
+    ResendVerificationRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, example: suman@example.com }
+    User:
+      type: object
+      required: [id, firstName, lastName, username, email, roles, status]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        username: { type: string }
+        email: { type: string, format: email }
+        roles:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [USER, PUBLISHER, ADVERTISER, MODERATOR, ADMIN, SUPER_ADMIN]
+        status: { type: string, enum: [ACTIVE, PENDING, SUSPENDED] }
+        emailVerifiedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    UserResponse:
+      type: object
+      properties:
+        success: { type: boolean, const: true }
+        message: { type: string }
+        data:
+          type: object
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    Unauthorized:
+      description: Authentication failed or is required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Email or username already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Verification attempts or delivery requests exceeded their limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
