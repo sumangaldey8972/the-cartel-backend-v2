@@ -8,6 +8,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "lint": "eslint .",
+    "migrate:roles": "node scripts/migrate-user-roles.js",
+    "migrate:roles:apply": "node scripts/migrate-user-roles.js --apply",
     "test": "node --test",
     "test:watch": "node --test --watch"
   },

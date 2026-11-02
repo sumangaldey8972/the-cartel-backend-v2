@@ -4,9 +4,11 @@ The Cartel uses opaque server-side sessions for its browser application. The bro
 
 ## Roles
 
-A user can hold multiple roles simultaneously. Supported roles are `USER`, `PUBLISHER`, `ADVERTISER`, `MODERATOR`, `ADMIN`, and `SUPER_ADMIN`.
+A user can hold multiple roles simultaneously. Roles are stored in the dedicated `roles` collection, and each user stores an array of role ObjectId references. Supported system roles are `USER`, `PUBLISHER`, `ADVERTISER`, `MODERATOR`, `ADMIN`, and `SUPER_ADMIN`.
 
 Public sign-up always creates a user with only the `USER` role. Role changes must be performed by a future protected administrative workflow and can never be supplied by a sign-up request.
+
+Run `npm run migrate:roles` first to inspect how many existing users require conversion. After confirming a database backup, run `npm run migrate:roles:apply` once to seed the system roles and convert legacy user role strings into role references in bounded batches. API responses continue returning role codes such as `["USER"]`, so the public authentication contract is unchanged.
 
 Sign-up accepts `firstName` and `lastName` as separate required fields. The API stores and returns them separately; it does not accept a combined `fullName` field.
 

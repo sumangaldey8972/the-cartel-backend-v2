@@ -1,10 +1,3 @@
-export const USER_ROLES = Object.freeze([
-  "USER",
-  "PUBLISHER",
-  "ADVERTISER",
-  "MODERATOR",
-  "ADMIN",
-  "SUPER_ADMIN",
-]);
+export { ROLE_CODES as USER_ROLES } from "../roles/role.constants.js";
 
 export const USER_STATUS = Object.freeze(["ACTIVE", "PENDING", "SUSPENDED"]);

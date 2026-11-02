@@ -6,7 +6,7 @@ describe("authorizeRoles", () => {
   it("allows a user when any assigned role is accepted", () => {
     const next = mock.fn();
     authorizeRoles("PUBLISHER", "ADMIN")(
-      { auth: { user: { roles: ["USER", "PUBLISHER"] } } },
+      { auth: { user: { roles: [{ code: "USER" }, { code: "PUBLISHER" }] } } },
       {},
       next,
     );
@@ -17,7 +17,7 @@ describe("authorizeRoles", () => {
   it("rejects a user when none of their roles are accepted", () => {
     const next = mock.fn();
     authorizeRoles("ADMIN")(
-      { auth: { user: { roles: ["USER", "PUBLISHER"] } } },
+      { auth: { user: { roles: [{ code: "USER" }, { code: "PUBLISHER" }] } } },
       {},
       next,
     );

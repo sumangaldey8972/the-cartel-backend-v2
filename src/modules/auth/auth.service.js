@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { env } from "../../config/env.js";
 import { sendVerificationOtp } from "../../services/email.service.js";
 import { ApiError } from "../../utils/api-error.js";
+import { getDefaultRole, roleCodes } from "../roles/role.service.js";
 import { User } from "../users/user.model.js";
 import { EmailVerification } from "./email-verification.model.js";
 import { RequestThrottle } from "./request-throttle.model.js";
@@ -26,7 +27,7 @@ export function publicUser(user) {
     lastName: user.lastName,
     username: user.username,
     email: user.email,
-    roles: [...user.roles],
+    roles: roleCodes(user.roles),
     status: user.status,
     emailVerifiedAt: user.emailVerifiedAt,
     createdAt: user.createdAt,
@@ -43,17 +44,22 @@ export async function registerUser(input) {
     throw new ApiError(409, "ACCOUNT_ALREADY_EXISTS", `An account with this ${field} already exists`, { field });
   }
 
-  const passwordHash = await bcrypt.hash(input.password, HASH_ROUNDS);
+  const [passwordHash, defaultRole] = await Promise.all([
+    bcrypt.hash(input.password, HASH_ROUNDS),
+    getDefaultRole(),
+  ]);
   try {
-    return await User.create({
+    const user = await User.create({
       firstName: input.firstName,
       lastName: input.lastName,
       username: input.username,
       email: input.email,
       passwordHash,
-      roles: ["USER"],
+      roles: [defaultRole._id],
       status: "PENDING",
     });
+    await user.populate({ path: "roles", select: "code" });
+    return user;
   } catch (error) {
     if (error?.code === 11000) {
       const field = error?.keyPattern?.email ? "email" : error?.keyPattern?.username ? "username" : null;
@@ -70,7 +76,9 @@ export async function registerUser(input) {
 
 export async function verifyCredentials({ identifier, password }) {
   const normalized = identifier.trim().toLowerCase();
-  const user = await User.findOne({ $or: [{ email: normalized }, { username: normalized }] }).select("+passwordHash");
+  const user = await User.findOne({ $or: [{ email: normalized }, { username: normalized }] })
+    .select("+passwordHash")
+    .populate({ path: "roles", select: "code" });
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     throw new ApiError(401, "INVALID_CREDENTIALS", "The email, username or password is incorrect");
@@ -143,7 +151,7 @@ export async function sendUserVerificationOtp(user, ipAddress) {
 }
 
 export async function verifyUserEmail({ email, otp }) {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email }).populate({ path: "roles", select: "code" });
   if (!user) {
     throw new ApiError(400, "INVALID_OTP", "The verification code is invalid or expired");
   }
@@ -207,7 +215,11 @@ export async function createSession(user, metadata = {}) {
 
 export async function getSessionUser(token) {
   if (!token) return null;
-  const session = await Session.findOne({ tokenHash: hashToken(token), revokedAt: null, expiresAt: { $gt: new Date() } }).populate("user");
+  const session = await Session.findOne({ tokenHash: hashToken(token), revokedAt: null, expiresAt: { $gt: new Date() } })
+    .populate({
+      path: "user",
+      populate: { path: "roles", select: "code" },
+    });
   if (!session?.user || session.user.status === "SUSPENDED") return null;
   return { session, user: session.user };
 }
