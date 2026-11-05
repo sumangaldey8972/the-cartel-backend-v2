@@ -2,13 +2,17 @@ openapi: 3.1.0
 info:
   title: The Cartel API
   version: 0.1.0
-  description: Authentication API for The Cartel user application.
+  description: Authentication and social feed API for The Cartel user application. MongoDB is the source of truth; Supabase broadcasts feed mutations to connected clients.
 servers:
   - url: http://localhost:4000
     description: Local development
 tags:
   - name: System
   - name: Authentication
+  - name: Feed
+  - name: Feed interactions
+  - name: Media
+  - name: Tags
 paths:
   /api/v1/health:
     get:
@@ -145,12 +149,186 @@ paths:
                 $ref: "#/components/schemas/UserResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/feed/posts:
+    get:
+      tags: [Feed]
+      summary: List published posts
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: sort
+          in: query
+          schema: { type: string, enum: [latest, oldest, popular], default: latest }
+        - name: tag
+          in: query
+          schema: { type: string, example: "#markets" }
+        - name: author
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Paginated feed }
+    post:
+      tags: [Feed]
+      summary: Publish a post
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePostRequest" }
+      responses:
+        "201": { description: Post published }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/feed/posts/{postId}:
+    parameters:
+      - $ref: "#/components/parameters/PostId"
+    get:
+      tags: [Feed]
+      summary: Get one published post
+      responses:
+        "200": { description: Published post }
+        "404": { description: Post not found }
+    patch:
+      tags: [Feed]
+      summary: Update the signed-in user's post
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePostRequest" }
+      responses:
+        "200": { description: Post updated }
+        "403": { description: Only the post author may update it }
+    delete:
+      tags: [Feed]
+      summary: Soft-delete a post and clean its Cloudinary media
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Post deleted }
+        "403": { description: Only the post author may delete it }
+  /api/v1/feed/media/signature:
+    post:
+      tags: [Media]
+      summary: Create a signed direct-upload request
+      description: Returns a user-scoped Cloudinary signature and upload URL. Upload with XMLHttpRequest to expose client-side stream progress; the API never buffers the file.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Signed Cloudinary upload parameters }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/feed/posts/{postId}/likes:
+    parameters:
+      - $ref: "#/components/parameters/PostId"
+    post:
+      tags: [Feed interactions]
+      summary: Like a post (idempotent)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Like state and count }
+    delete:
+      tags: [Feed interactions]
+      summary: Remove the signed-in user's like
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Like state and count }
+  /api/v1/feed/posts/{postId}/comments:
+    parameters:
+      - $ref: "#/components/parameters/PostId"
+    get:
+      tags: [Feed interactions]
+      summary: List post comments
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Paginated comments }
+    post:
+      tags: [Feed interactions]
+      summary: Comment on a post or reply to a comment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCommentRequest" }
+      responses:
+        "201": { description: Comment published }
+  /api/v1/feed/comments/{commentId}:
+    parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Feed interactions]
+      summary: Update the signed-in user's comment
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200": { description: Comment updated }
+    delete:
+      tags: [Feed interactions]
+      summary: Soft-delete the signed-in user's comment
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Comment deleted }
+  /api/v1/feed/posts/{postId}/shares:
+    parameters:
+      - $ref: "#/components/parameters/PostId"
+    post:
+      tags: [Feed interactions]
+      summary: Share a post (idempotent)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Share state and count }
+    delete:
+      tags: [Feed interactions]
+      summary: Remove the signed-in user's share
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Share state and count }
+  /api/v1/feed/tags:
+    get:
+      tags: [Tags]
+      summary: Search or list trending inline hashtags
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200": { description: Tags ordered by usage and recency }
 components:
   securitySchemes:
     sessionCookie:
       type: apiKey
       in: cookie
       name: cartel_session
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    PostId:
+      name: postId
+      in: path
+      required: true
+      schema: { type: string }
   schemas:
     SignUpRequest:
       type: object
@@ -206,6 +384,53 @@ components:
           properties:
             user:
               $ref: "#/components/schemas/User"
+    MediaAsset:
+      type: object
+      required: [publicId, secureUrl, resourceType]
+      properties:
+        publicId: { type: string }
+        secureUrl: { type: string, format: uri }
+        resourceType: { type: string, enum: [image, video] }
+        format: { type: string }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        bytes: { type: integer, minimum: 0 }
+        duration: { type: number, minimum: 0 }
+        altText: { type: string, maxLength: 1000 }
+        taggedPeople:
+          type: array
+          items: { type: string }
+        madeWithAi: { type: boolean, default: false }
+        cropAspect: { type: string, enum: [original, "1 / 1", "16 / 9", "4 / 5"], default: original }
+        cropX: { type: number, minimum: 0, maximum: 100, default: 50 }
+        cropY: { type: number, minimum: 0, maximum: 100, default: 50 }
+        zoom: { type: number, minimum: 1, maximum: 2.5, default: 1 }
+    CreatePostRequest:
+      type: object
+      description: Hashtags are extracted from content server-side; do not send a separate tags field.
+      properties:
+        content: { type: string, maxLength: 1000, example: "Market outlook\n\n#markets #btc" }
+        media:
+          type: array
+          maxItems: 4
+          items: { $ref: "#/components/schemas/MediaAsset" }
+        replyPermission: { type: string, enum: [EVERYONE, FOLLOWING, MENTIONED], default: EVERYONE }
+    UpdatePostRequest:
+      type: object
+      minProperties: 1
+      properties:
+        content: { type: string, maxLength: 1000 }
+        media:
+          type: array
+          maxItems: 4
+          items: { $ref: "#/components/schemas/MediaAsset" }
+        replyPermission: { type: string, enum: [EVERYONE, FOLLOWING, MENTIONED] }
+    CreateCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 1000 }
+        parentCommentId: { type: string }
     Error:
       type: object
       properties:

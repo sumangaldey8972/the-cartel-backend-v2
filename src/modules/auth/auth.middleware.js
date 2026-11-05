@@ -13,6 +13,12 @@ export const authenticate = asyncHandler(async (request, _response, next) => {
   next();
 });
 
+export const optionalAuthenticate = asyncHandler(async (request, _response, next) => {
+  const token = request.cookies[env.sessionCookieName];
+  if (token) request.auth = await getSessionUser(token) ?? undefined;
+  next();
+});
+
 export function authorizeRoles(...allowedRoles) {
   return function roleAuthorization(request, _response, next) {
     const userRoles = roleCodes(request.auth?.user?.roles);

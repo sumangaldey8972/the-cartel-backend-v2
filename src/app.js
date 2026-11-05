@@ -9,6 +9,7 @@ import { ensureDatabase } from "./middlewares/database.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { verifyTrustedOrigin } from "./middlewares/security.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { feedRouter } from "./modules/feed/feed.routes.js";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiSpecification, { cu
 
 app.use("/api/v1", ensureDatabase);
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/feed", feedRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

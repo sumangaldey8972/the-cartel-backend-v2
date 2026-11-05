@@ -26,6 +26,16 @@ export const env = Object.freeze({
     pass: process.env.SMTP_PASS ?? "",
     from: process.env.EMAIL_FROM ?? "",
   }),
+  supabase: Object.freeze({
+    url: (process.env.SUPABASE_URL ?? "").trim().replace(/\/$/, ""),
+    serviceRoleKey: (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim(),
+  }),
+  cloudinary: Object.freeze({
+    cloudName: (process.env.CLOUDINARY_CLOUD_NAME ?? "").trim(),
+    apiKey: (process.env.CLOUDINARY_API_KEY ?? "").trim(),
+    apiSecret: (process.env.CLOUDINARY_API_SECRET ?? "").trim(),
+    folder: (process.env.CLOUDINARY_FOLDER ?? "the_cartel").trim().replace(/^\/+|\/+$/g, ""),
+  }),
 });
 
 export function assertServerEnvironment() {
@@ -38,6 +48,17 @@ export function assertServerEnvironment() {
     .map(([key]) => key);
   if (missingEmailSettings.length > 0) {
     throw new Error(`Missing SMTP configuration: ${missingEmailSettings.join(", ")}`);
+  }
+
+  const missingFeedSettings = [
+    ["SUPABASE_URL", env.supabase.url],
+    ["SUPABASE_SERVICE_ROLE_KEY", env.supabase.serviceRoleKey],
+    ["CLOUDINARY_CLOUD_NAME", env.cloudinary.cloudName],
+    ["CLOUDINARY_API_KEY", env.cloudinary.apiKey],
+    ["CLOUDINARY_API_SECRET", env.cloudinary.apiSecret],
+  ].filter(([, value]) => !value).map(([key]) => key);
+  if (missingFeedSettings.length > 0) {
+    throw new Error(`Missing feed service configuration: ${missingFeedSettings.join(", ")}`);
   }
 }
 
