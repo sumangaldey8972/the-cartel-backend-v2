@@ -5,7 +5,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "lint": "eslint .",
     "migrate:roles": "node scripts/migrate-user-roles.js",
@@ -35,6 +35,7 @@
     "@eslint/js": "^10.0.0",
     "eslint": "^10.0.0",
     "globals": "^16.5.0",
+    "nodemon": "^3.1.10",
     "supertest": "^7.1.4"
   }
 }

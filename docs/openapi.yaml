@@ -281,6 +281,24 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         "200": { description: Comment deleted }
+  /api/v1/feed/comments/{commentId}/likes:
+    parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Feed interactions]
+      summary: Like a comment or reply (idempotent)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Like state and count }
+    delete:
+      tags: [Feed interactions]
+      summary: Remove the signed-in user's comment like
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Like state and count }
   /api/v1/feed/posts/{postId}/shares:
     parameters:
       - $ref: "#/components/parameters/PostId"

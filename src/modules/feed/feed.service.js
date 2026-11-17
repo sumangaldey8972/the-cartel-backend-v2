@@ -2,6 +2,7 @@ import { ApiError } from "../../utils/api-error.js";
 import { assertOwnedMedia, deleteCloudinaryAssets } from "../../services/cloudinary.service.js";
 import { broadcastFeedEvent } from "../../services/realtime.service.js";
 import { Comment } from "./comment.model.js";
+import { CommentLike } from "./comment-like.model.js";
 import { COMMENT_STATUS, POST_STATUS } from "./feed.constants.js";
 import { Post } from "./post.model.js";
 import { PostLike } from "./post-like.model.js";
@@ -91,6 +92,14 @@ export async function listPosts({ page, limit, sort, tag, author }, userId) {
   if (normalizedTag) query.tags = normalizedTag;
   if (author) query.author = author;
   const result = await Post.paginate(query, { page, limit, sort: sortFor(sort), populate: authorPopulate, lean: true });
+  if (result.docs.length > 0) {
+    const counts = await Comment.aggregate([
+      { $match: { post: { $in: result.docs.map((post) => post._id) }, status: COMMENT_STATUS.PUBLISHED } },
+      { $group: { _id: "$post", count: { $sum: 1 } } },
+    ]);
+    const countByPostId = new Map(counts.map((entry) => [entry._id.toString(), entry.count]));
+    result.docs = result.docs.map((post) => ({ ...post, commentCount: countByPostId.get(post._id.toString()) ?? 0 }));
+  }
   result.docs = await addViewerState(result.docs, userId);
   return result;
 }
@@ -187,19 +196,27 @@ export async function likePost(postId, userId) {
 export async function unlikePost(postId, userId) {
   const result = await PostLike.deleteOne({ post: postId, user: userId });
   if (result.deletedCount > 0) {
-    await Post.updateOne({ _id: postId }, [{ $set: { likeCount: { $max: [0, { $subtract: ["$likeCount", 1] }] } } }]);
+    await Post.updateOne({ _id: postId, likeCount: { $gt: 0 } }, { $inc: { likeCount: -1 } });
   }
   const post = await getPublishedPost(postId);
   if (result.deletedCount > 0) await broadcastFeedEvent("post.unliked", { postId, userId: userId.toString(), likeCount: post.likeCount });
   return { liked: false, likeCount: post.likeCount };
 }
 
-export async function listComments(postId, { page, limit, sort }) {
+export async function listComments(postId, { page, limit, sort }, userId) {
   await getPublishedPost(postId);
-  return Comment.paginate(
+  const result = await Comment.paginate(
     { post: postId, status: COMMENT_STATUS.PUBLISHED },
     { page, limit, sort: sortFor(sort), populate: authorPopulate, lean: true },
   );
+  if (!userId || result.docs.length === 0) {
+    result.docs = result.docs.map((comment) => ({ ...comment, likeCount: comment.likeCount ?? 0, viewerHasLiked: false }));
+    return result;
+  }
+  const likes = await CommentLike.find({ comment: { $in: result.docs.map((comment) => comment._id) }, user: userId }).select("comment").lean();
+  const likedIds = new Set(likes.map((like) => like.comment.toString()));
+  result.docs = result.docs.map((comment) => ({ ...comment, likeCount: comment.likeCount ?? 0, viewerHasLiked: likedIds.has(comment._id.toString()) }));
+  return result;
 }
 
 export async function createComment(postId, userId, input) {
@@ -218,7 +235,8 @@ export async function createComment(postId, userId, input) {
     Post.updateOne({ _id: postId }, { $inc: { commentCount: 1 } }),
     comment.populate(authorPopulate),
   ]);
-  await broadcastFeedEvent("comment.created", { postId, comment });
+  const post = await Post.findById(postId).select("commentCount").lean();
+  await broadcastFeedEvent("comment.created", { postId, comment, commentCount: post?.commentCount ?? 0 });
   return comment;
 }
 
@@ -240,8 +258,35 @@ export async function deleteComment(commentId, userId) {
   comment.status = COMMENT_STATUS.DELETED;
   comment.deletedAt = new Date();
   await comment.save();
-  await Post.updateOne({ _id: comment.post }, [{ $set: { commentCount: { $max: [0, { $subtract: ["$commentCount", 1] }] } } }]);
-  await broadcastFeedEvent("comment.deleted", { postId: comment.post.toString(), commentId: comment._id.toString() });
+  await Post.updateOne({ _id: comment.post, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } });
+  const post = await Post.findById(comment.post).select("commentCount").lean();
+  await broadcastFeedEvent("comment.deleted", { postId: comment.post.toString(), commentId: comment._id.toString(), commentCount: post?.commentCount ?? 0 });
+}
+
+export async function likeComment(commentId, userId) {
+  const comment = await Comment.findOne({ _id: commentId, status: COMMENT_STATUS.PUBLISHED }).select("post likeCount");
+  if (!comment) throw new ApiError(404, "COMMENT_NOT_FOUND", "Comment not found");
+  let created = false;
+  try {
+    await CommentLike.create({ comment: commentId, user: userId });
+    created = true;
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+  }
+  if (created) await Comment.updateOne({ _id: commentId }, { $inc: { likeCount: 1 } });
+  const updated = await Comment.findById(commentId).select("post likeCount").lean();
+  if (created) await broadcastFeedEvent("comment.liked", { postId: updated.post.toString(), commentId, userId: userId.toString(), likeCount: updated.likeCount });
+  return { liked: true, likeCount: updated.likeCount };
+}
+
+export async function unlikeComment(commentId, userId) {
+  const result = await CommentLike.deleteOne({ comment: commentId, user: userId });
+  const comment = await Comment.findOne({ _id: commentId, status: COMMENT_STATUS.PUBLISHED }).select("post likeCount");
+  if (!comment) throw new ApiError(404, "COMMENT_NOT_FOUND", "Comment not found");
+  if (result.deletedCount > 0) await Comment.updateOne({ _id: commentId, likeCount: { $gt: 0 } }, { $inc: { likeCount: -1 } });
+  const updated = await Comment.findById(commentId).select("post likeCount").lean();
+  if (result.deletedCount > 0) await broadcastFeedEvent("comment.unliked", { postId: updated.post.toString(), commentId, userId: userId.toString(), likeCount: updated.likeCount });
+  return { liked: false, likeCount: updated.likeCount };
 }
 
 export async function sharePost(postId, userId) {
@@ -262,7 +307,7 @@ export async function sharePost(postId, userId) {
 export async function unsharePost(postId, userId) {
   const result = await PostShare.deleteOne({ post: postId, user: userId });
   if (result.deletedCount > 0) {
-    await Post.updateOne({ _id: postId }, [{ $set: { shareCount: { $max: [0, { $subtract: ["$shareCount", 1] }] } } }]);
+    await Post.updateOne({ _id: postId, shareCount: { $gt: 0 } }, { $inc: { shareCount: -1 } });
   }
   const post = await getPublishedPost(postId);
   if (result.deletedCount > 0) await broadcastFeedEvent("post.unshared", { postId, userId: userId.toString(), shareCount: post.shareCount });

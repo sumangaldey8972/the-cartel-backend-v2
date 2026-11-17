@@ -6,7 +6,7 @@ function parsePositiveInteger(value, fallback) {
 }
 
 function parseOrigins(value) {
-  return (value ?? "http://127.0.0.1:4180,http://localhost:4180")
+  return (value ?? "http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:4174,http://localhost:4174,http://127.0.0.1:4180,http://localhost:4180,http://localhost:3000")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);

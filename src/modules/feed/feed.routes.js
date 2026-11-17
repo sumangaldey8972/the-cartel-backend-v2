@@ -10,11 +10,13 @@ import {
   deletePost,
   getPost,
   likePost,
+  likeComment,
   listComments,
   listPosts,
   searchTags,
   sharePost,
   unlikePost,
+  unlikeComment,
   unsharePost,
   updateComment,
   updatePost,
@@ -41,10 +43,12 @@ feedRouter.post("/media/signature", authenticate, asyncHandler(createMediaSignat
 feedRouter.post("/posts/:postId/likes", authenticate, asyncHandler(likePost));
 feedRouter.delete("/posts/:postId/likes", authenticate, asyncHandler(unlikePost));
 
-feedRouter.get("/posts/:postId/comments", validateQuery(paginationQuerySchema), asyncHandler(listComments));
+feedRouter.get("/posts/:postId/comments", optionalAuthenticate, validateQuery(paginationQuerySchema), asyncHandler(listComments));
 feedRouter.post("/posts/:postId/comments", authenticate, validateRequest(createCommentSchema), asyncHandler(createComment));
 feedRouter.patch("/comments/:commentId", authenticate, validateRequest(updateCommentSchema), asyncHandler(updateComment));
 feedRouter.delete("/comments/:commentId", authenticate, asyncHandler(deleteComment));
+feedRouter.post("/comments/:commentId/likes", authenticate, asyncHandler(likeComment));
+feedRouter.delete("/comments/:commentId/likes", authenticate, asyncHandler(unlikeComment));
 
 feedRouter.post("/posts/:postId/shares", authenticate, asyncHandler(sharePost));
 feedRouter.delete("/posts/:postId/shares", authenticate, asyncHandler(unsharePost));

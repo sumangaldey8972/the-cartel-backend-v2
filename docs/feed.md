@@ -48,6 +48,7 @@ Clients can subscribe to the public `feed` channel. Events are:
 - `post.liked`, `post.unliked`
 - `post.shared`, `post.unshared`
 - `comment.created`, `comment.updated`, `comment.deleted`
+- `comment.liked`, `comment.unliked`
 
 Broadcast delivery is best-effort and has a two-second timeout. A Supabase outage never rolls back an already successful MongoDB mutation.
 

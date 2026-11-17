@@ -8,6 +8,7 @@ const commentSchema = new mongoose.Schema(
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     parentComment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment", default: null, index: true },
     content: { type: String, required: true, trim: true, maxlength: 1_000 },
+    likeCount: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: COMMENT_STATUSES, default: "PUBLISHED", index: true },
     deletedAt: { type: Date, default: null },
   },

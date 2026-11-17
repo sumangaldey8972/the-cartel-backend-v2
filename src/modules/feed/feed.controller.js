@@ -7,11 +7,13 @@ import {
   deletePost as deletePostRecord,
   getPost as getPostRecord,
   likePost as likePostRecord,
+  likeComment as likeCommentRecord,
   listComments as listCommentRecords,
   listPosts as listPostRecords,
   searchTags as searchTagRecords,
   sharePost as sharePostRecord,
   unlikePost as unlikePostRecord,
+  unlikeComment as unlikeCommentRecord,
   unsharePost as unsharePostRecord,
   updateComment as updateCommentRecord,
   updatePost as updatePostRecord,
@@ -58,7 +60,7 @@ export async function unlikePost(request, response) {
 }
 
 export async function listComments(request, response) {
-  const result = await listCommentRecords(request.params.postId, request.validatedQuery);
+  const result = await listCommentRecords(request.params.postId, request.validatedQuery, request.auth?.user?._id);
   return sendSuccess(response, { data: result });
 }
 
@@ -75,6 +77,16 @@ export async function updateComment(request, response) {
 export async function deleteComment(request, response) {
   await deleteCommentRecord(request.params.commentId, request.auth.user._id);
   return sendSuccess(response, { message: "Comment deleted" });
+}
+
+export async function likeComment(request, response) {
+  const result = await likeCommentRecord(request.params.commentId, request.auth.user._id);
+  return sendSuccess(response, { data: result });
+}
+
+export async function unlikeComment(request, response) {
+  const result = await unlikeCommentRecord(request.params.commentId, request.auth.user._id);
+  return sendSuccess(response, { data: result });
 }
 
 export async function sharePost(request, response) {

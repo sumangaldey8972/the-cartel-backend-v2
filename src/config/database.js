@@ -41,3 +41,16 @@ export async function disconnectDatabase() {
   cache.connection = null;
   cache.promise = null;
 }
+
+export async function checkDatabaseHealth() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    return { ok: false, status: "not-connected" };
+  }
+
+  try {
+    await mongoose.connection.db.admin().ping();
+    return { ok: true, status: "connected" };
+  } catch (error) {
+    return { ok: false, status: error instanceof Error ? error.message : "ping-failed" };
+  }
+}
